@@ -460,7 +460,7 @@ def _is_dh_degenerate(a) -> bool:
 def _perturb_if_degenerate(alpha, a, d):
     if not _is_dh_degenerate(a):
         return alpha, a, d
-    
+
     scale = max((abs(x) for x in d), default=0.0) or 1.0
     eps = _RR_REL_EPS * scale
     a_new = tuple(eps if abs(ai) < _DEGEN_ATOL else ai for i, ai in enumerate(a))
@@ -1761,7 +1761,7 @@ def solve_all_ik(
     """
     if max_solutions is not None and max_solutions < 1:
         raise ValueError(f"max_solutions must be >= 1 or None; got {max_solutions}")
-    
+
     alpha, a, d = dh
     if linearity_joint == "auto":
         # AE-3 (#70): pick the best leftvar (cached per arm; the structural
