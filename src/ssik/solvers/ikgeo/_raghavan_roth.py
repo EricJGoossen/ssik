@@ -452,10 +452,12 @@ def _dh_key(values: tuple[float, ...] | NDArray[np.float64]) -> tuple[float, ...
 _DEGEN_ATOL = 1e-9
 _RR_REL_EPS = 1e-3
 
+
 def _is_dh_degenerate(a) -> bool:
     """The condition _perturb_if_degenerate acts on. Exposed so jointlock can
     decide whether to force Newton polish without duplicating the threshold."""
     return any(abs(ai) < _DEGEN_ATOL for ai in a)
+
 
 def _perturb_if_degenerate(alpha, a, d):
     if not _is_dh_degenerate(a):
@@ -466,6 +468,7 @@ def _perturb_if_degenerate(alpha, a, d):
     a_new = tuple(eps if abs(ai) < _DEGEN_ATOL else ai for i, ai in enumerate(a))
 
     return alpha, a_new, d
+
 
 def _cached_derivation(
     alpha: tuple[float, ...],
