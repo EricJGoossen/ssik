@@ -453,14 +453,18 @@ _DEGEN_ATOL = 1e-9
 _RR_REL_EPS = 1e-3
 
 
-def _is_dh_degenerate(a) -> bool:
+def _is_dh_degenerate(alpha: tuple[float, ...], a: tuple[float, ...], d: tuple[float, ...]) -> bool:
     """The condition _perturb_if_degenerate acts on. Exposed so jointlock can
     decide whether to force Newton polish without duplicating the threshold."""
-    return any(abs(ai) < _DEGEN_ATOL for ai in a)
+    all_a_zero = all(abs(ai) < _DEGEN_ATOL for ai in a)
+    alpha_is_right_angle = all(abs(abs(ax) - np.pi / 2) < 1e-6 for ax in alpha)
+    return all_a_zero and alpha_is_right_angle
 
 
-def _perturb_if_degenerate(alpha, a, d):
-    if not _is_dh_degenerate(a):
+def _perturb_if_degenerate(
+    alpha: tuple[float, ...], a: tuple[float, ...], d: tuple[float, ...]
+) -> tuple[tuple[float, ...], ...]:
+    if not _is_dh_degenerate(alpha, a, d):
         return alpha, a, d
 
     scale = max((abs(x) for x in d), default=0.0) or 1.0
@@ -1779,7 +1783,9 @@ def solve_all_ik(
     if not isinstance(linearity_joint, int):
         raise ValueError(f"linearity_joint must be int or 'auto'; got {linearity_joint!r}")
 
-    allow_refinement = allow_refinement or _is_dh_degenerate(tuple(float(x) for x in a))
+    allow_refinement = allow_refinement or _is_dh_degenerate(
+        tuple(float(x) for x in alpha), tuple(float(x) for x in a), tuple(float(x) for x in d)
+    )
 
     p_sin, p_cos, p_one, q_mat, meta = build_pq(
         dh,
