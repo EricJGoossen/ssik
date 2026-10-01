@@ -447,6 +447,33 @@ def _dh_key(values: tuple[float, ...] | NDArray[np.float64]) -> tuple[float, ...
     return tuple(round(float(x), _DH_KEY_DECIMALS) for x in values)
 
 
+# Scale-relative epsilon: fraction of the chain's characteristic length.
+# Override per-run without editing the file:  RR_EPS=1e-2 uv run python ...
+_DEGEN_ATOL = 1e-9
+_RR_REL_EPS = 1e-3
+
+
+def _is_dh_degenerate(alpha: tuple[float, ...], a: tuple[float, ...], d: tuple[float, ...]) -> bool:
+    """The condition _perturb_if_degenerate acts on. Exposed so jointlock can
+    decide whether to force Newton polish without duplicating the threshold."""
+    all_a_zero = all(abs(ai) < _DEGEN_ATOL for ai in a)
+    alpha_is_right_angle = all(abs(abs(ax) - np.pi / 2) < 1e-6 for ax in alpha)
+    return all_a_zero and alpha_is_right_angle
+
+
+def _perturb_if_degenerate(
+    alpha: tuple[float, ...], a: tuple[float, ...], d: tuple[float, ...]
+) -> tuple[tuple[float, ...], ...]:
+    if not _is_dh_degenerate(alpha, a, d):
+        return alpha, a, d
+
+    scale = max((abs(x) for x in d), default=0.0) or 1.0
+    eps = _RR_REL_EPS * scale
+    a_new = tuple(eps if abs(ai) < _DEGEN_ATOL else ai for i, ai in enumerate(a))
+
+    return alpha, a_new, d
+
+
 def _cached_derivation(
     alpha: tuple[float, ...],
     a: tuple[float, ...],
@@ -454,6 +481,7 @@ def _cached_derivation(
     linearity_joint: int = 2,
     apply_so3: bool = False,
 ) -> _DerivationValue:
+    alpha, a, d = _perturb_if_degenerate(alpha, a, d)
     key = (_dh_key(alpha), _dh_key(a), _dh_key(d), int(linearity_joint), bool(apply_so3))
     cached = _DERIVATION_CACHE.get(key)
     if cached is not None:
@@ -1740,16 +1768,24 @@ def solve_all_ik(
     """
     if max_solutions is not None and max_solutions < 1:
         raise ValueError(f"max_solutions must be >= 1 or None; got {max_solutions}")
+
+    alpha, a, d = dh
     if linearity_joint == "auto":
         # AE-3 (#70): pick the best leftvar (cached per arm; the structural
         # pathology that determines the choice is geometry-driven, not
         # pose-driven, so we don't pass t_target here).
-        alpha, a, d = dh
-        linearity_joint = _cached_best_leftvar(
-            tuple(alpha.tolist()), tuple(a.tolist()), tuple(d.tolist())
+        alpha_p, a_p, d_p = _perturb_if_degenerate(
+            tuple(float(x) for x in alpha),
+            tuple(float(x) for x in a),
+            tuple(float(x) for x in d),
         )
+        linearity_joint = _cached_best_leftvar(alpha_p, a_p, d_p)
     if not isinstance(linearity_joint, int):
         raise ValueError(f"linearity_joint must be int or 'auto'; got {linearity_joint!r}")
+
+    allow_refinement = allow_refinement or _is_dh_degenerate(
+        tuple(float(x) for x in alpha), tuple(float(x) for x in a), tuple(float(x) for x in d)
+    )
 
     p_sin, p_cos, p_one, q_mat, meta = build_pq(
         dh,
